@@ -1,0 +1,298 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Detección de Placas Vehiculares</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        #resultado {
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: center;
+            margin-top: 20px;
+            color: #28a745;
+        }
+        #canvas {
+            border: 3px solid #0d6efd;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: #000;
+        }
+        .procesando {
+            color: #0d6efd;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            background-color: #28a745;
+            color: white;
+            font-size: 0.9rem;
+            margin: 10px 0;
+        }
+        .info-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        .placas-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .placa-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .placa-texto {
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .placa-confianza {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .no-placas {
+            text-align: center;
+            color: #6c757d;
+            padding: 30px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="px-4 py-3 my-3 text-center border-bottom bg-white">
+            <h1 class="display-5 fw-bold">Detección de Placas</h1>
+            <div class="col-lg-6 mx-auto">
+                <p class="lead mb-2">Detección en tiempo real usando YOLO y PaddleOCR</p>
+            </div>
+        </div>
+
+        <div class="container mt-4">
+            <div class="row">
+                <div class="col-12 col-lg-8">
+                    <video id="video" playsinline autoplay style="width: 1px; height: 1px;"></video>
+                    
+                    <button class="btn btn-primary mb-3 btn-lg w-100" id="cambiar-camara" onclick="cambiarCamara();">
+                         Cambiar Cámara
+                    </button>
+                    
+                    <div>
+                        <canvas id="canvas" width="1280" height="720" style="max-width: 100%;"></canvas>
+                    </div>
+                    
+                    <canvas id="otrocanvas" style="display: none"></canvas>
+                    
+                    <div id="resultado" class="procesando">Esperando detección...</div>
+                </div>
+                
+                <div class="col-12 col-lg-4">
+                    <div class="placas-container">
+                        <h5>Placas Detectadas</h5>
+                        <div id="placas-lista">
+                            <div class="no-placas">
+                                Aún no se han detectado placas
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script type="text/javascript">
+        var video = document.getElementById("video");
+        var canvas = document.getElementById("canvas");
+        var ctx = canvas.getContext("2d");
+        var currentStream = null;
+        var facingMode = "environment";
+        var procesando = false;
+        var placasHistorial = new Map(); // Para evitar duplicados
+
+        window.onload = function() {
+            mostrarCamara();
+        }
+
+        function mostrarCamara() {
+            var opciones = {
+                audio: false,
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+
+            if (navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia(opciones)
+                    .then(function(stream) {
+                        currentStream = stream;
+                        video.srcObject = currentStream;
+                        procesarCamara();
+                        enviarFrames();
+                    })
+                    .catch(function(err) {
+                        alert("No se pudo utilizar la cámara :(\n" + err.message);
+                        console.log(err);
+                    });
+            } else {
+                alert("Tu navegador no soporta getUserMedia");
+            }
+        }
+
+        function cambiarCamara() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            facingMode = facingMode == "user" ? "environment" : "user";
+
+            var opciones = {
+                audio: false,
+                video: { 
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+
+            navigator.mediaDevices.getUserMedia(opciones)
+                .then(function(stream) {
+                    currentStream = stream;
+                    video.srcObject = currentStream;
+                })
+                .catch(function(err) {
+                    console.log("Error al cambiar cámara", err);
+                    alert("No se pudo cambiar la cámara");
+                });
+        }
+
+        function procesarCamara() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            setTimeout(procesarCamara, 30);
+        }
+
+        function actualizarListaPlacas(placas) {
+            var listaHTML = '';
+            
+            if (placas.length === 0) {
+                listaHTML = '<div class="no-placas">Aún no se han detectado placas</div>';
+            } else {
+                placas.forEach(function(placa) {
+                    placasHistorial.set(placa.placa, {
+                        confianza: placa.confianza,
+                        timestamp: Date.now()
+                    });
+                });
+                
+                // Limpiar placas 
+                var now = Date.now();
+                placasHistorial.forEach(function(value, key) {
+                    if (now - value.timestamp > 3000) {
+                        placasHistorial.delete(key);
+                    }
+                });
+                
+                // HTML de placas
+                placasHistorial.forEach(function(value, placa) {
+                    listaHTML += `
+                        <div class="placa-item">
+                            <div>
+                                <div class="placa-texto">${placa}</div>
+                            </div>
+                            <div>
+                                <span style="font-size: 2rem;"></span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            document.getElementById('placas-lista').innerHTML = listaHTML;
+        }
+
+        function enviarFrames() {
+            if (!procesando) {
+                procesando = true;
+                document.getElementById("resultado").innerHTML = " Procesando...";
+                document.getElementById("resultado").className = "procesando";
+                
+                var imageData = canvas.toDataURL('image/jpeg', 0.9);
+                
+                fetch('/process_image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: imageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        var img = new Image();
+                        img.onload = function() {
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        };
+                        img.src = data.image;
+                        
+                        // Actualizar lista de placas
+                        if (data.placas && data.placas.length > 0) {
+                            document.getElementById("resultado").innerHTML = 
+                                ` ${data.placas.length} placa(s) detectada(s)`;
+                            actualizarListaPlacas(data.placas);
+                        } else {
+                            document.getElementById("resultado").innerHTML = "Buscando placas...";
+                            actualizarListaPlacas([]);
+                        }
+                        document.getElementById("resultado").style.color = "#28a745";
+                    } else {
+                        document.getElementById("resultado").innerHTML = "Error: " + data.error;
+                        document.getElementById("resultado").style.color = "#dc3545";
+                    }
+                    procesando = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById("resultado").innerHTML = "error de conexión";
+                    document.getElementById("resultado").style.color = "#dc3545";
+                    procesando = false;
+                });
+            }
+            
+            setTimeout(enviarFrames, 500);
+        }
+    </script>
+</body>
+</html>
