@@ -73,14 +73,14 @@ def process_image():
                             
                             print(f"Resultado OCR: {result_ocr}")
                             
-                            # Ordenar textos de izquierda a derecha
+                            #Ordenar textos de izquierda a derecha
                             boxes = result_ocr[0]['rec_boxes']
                             texts = result_ocr[0]['rec_texts']
                             left_to_right = sorted(zip(boxes, texts), key=lambda x: min(x[0][::2]))
                             
                             print(f"Textos ordenados: {left_to_right}")
                             
-                            # Filtrar por whitelist
+                            
                             whitelist_pattern = re.compile(r'^[A-Z0-9]+$')
                             left_to_right_text = ''.join([t for _, t in left_to_right])
                             output_text = ''.join([t for t in left_to_right_text if whitelist_pattern.fullmatch(t)])
@@ -104,9 +104,9 @@ def process_image():
                             cv2.putText(frame, output_text, (x1-7, y1-5), 
                                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
                             
-                            # Mostrar confianza
-                            cv2.putText(frame, f"{conf:.2f}", (x1, y2+20), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                            
+                            #cv2.putText(frame, f"{conf:.2f}", (x1, y2+20), 
+                             #          cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                             
                             print(f" Placa detectada: {output_text} (confianza: {conf:.2f})")
                             
